@@ -1,8 +1,9 @@
+use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 use std::{
+    env::{current_dir, var},
+    fs::{create_dir_all, metadata, write},
     path::Path,
-    env::{var, current_dir},
-    fs::{write, metadata, create_dir_all,},
 };
 use tracing::info;
 
@@ -13,8 +14,11 @@ pub struct Config {
 }
 
 impl Config {
+    #[allow(dead_code)]
     pub async fn write(&self, file_path: &str) {
-        let dir = Path::new(&file_path).parent().expect("Could not get parent directory");
+        let dir = Path::new(&file_path)
+            .parent()
+            .expect("Could not get parent directory");
         let file = Path::new(&file_path);
         let toml = toml::to_string(&self).expect("Could not convert config to TOML");
 
@@ -42,12 +46,20 @@ pub async fn read_config() -> Result<Config, Box<dyn std::error::Error>> {
         let config: Config = toml::from_str(&file)?;
         Ok(config)
     } else {
-        let username = var("LASTFM_USERNAME").expect("Could not get username from environment variable");
-        let api_key = var("LASTFM_API_KEY").expect("Could not get API key from environment variable");
-        let config = Config {
-            username,
-            api_key,
-        };
-        Ok(config)
+        let (username, api_key) = (var("LASTFM_USERNAME"), var("LASTFM_API_KEY"));
+        if username.is_err() || api_key.is_err() {
+            dotenv().ok();
+            let (username, api_key) = (
+                var("LASTFM_USERNAME").expect("Could not get LASTFM_USERNAME from environment"),
+                var("LASTFM_API_KEY").expect("Could not get LASTFM_API_KEY from environment"),
+            );
+            Ok(Config { username, api_key })
+        } else {
+            let (username, api_key) = (
+                var("LASTFM_USERNAME").expect("Could not get LASTFM_USERNAME from environment"),
+                var("LASTFM_API_KEY").expect("Could not get LASTFM_API_KEY from environment"),
+            );
+            Ok(Config { username, api_key })
+        }
     }
 }
