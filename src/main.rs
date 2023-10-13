@@ -1,12 +1,12 @@
-use config::{read_config, Config};
+use config::Config;
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use futures::{stream::FuturesUnordered, StreamExt};
+use requests::CurrentTrack;
 use reqwest::Client;
 use std::env::current_dir;
-use requests::{get_track, CurrentTrack};
-use tracing::{info, error};
-use url::{Url, ParseError};
 use tokio::spawn;
+use tracing::{error, info};
+use url::{ParseError, Url};
 mod config;
 mod requests;
 
@@ -30,9 +30,9 @@ async fn main() {
 async fn test_rpc() -> Result<(), Box<dyn std::error::Error>> {
     let mut rpc_client = DiscordIpcClient::new("1161781788306317513")?;
     let request_client = Client::new();
-    let config_task = spawn(read_config());
-    let config = config_task.await?.expect("Could not read config file");
-    let scrobble = spawn(get_scrobble(request_client, config)).await?.expect("Could not get scrobble");
+    let scrobble = spawn(get_scrobble(request_client))
+        .await?
+        .expect("Could not get scrobble");
     match scrobble {
         Some(presence) => {
             let activity = activity::Activity::new()
@@ -81,11 +81,12 @@ async fn write_to_config(username: String, api_key: String) {
 #[allow(dead_code)]
 async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
     let image = track.recenttracks.track[0].image.clone();
-    let mut is_url: FuturesUnordered<_> = image.into_iter().map(|image| async move {
-        return Url::parse(&image.text);
-    }).collect();
+    let mut is_url: FuturesUnordered<_> = image
+        .into_iter()
+        .map(|image| async move { Url::parse(&image.text) })
+        .collect();
 
-    while let Some(result) = is_url.next().await {
+    if let Some(result) = is_url.next().await {
         match result {
             Ok(_) => {
                 info!("Image is a valid URL");
@@ -100,13 +101,11 @@ async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
     Ok(())
 }
 
-
-async fn get_scrobble(
-    client: Client,
-    config: Config,
-) -> tokio::io::Result<Option<Presence>> {
-    info!("Getting scrobble for {}", config.username);
-    let current_track = get_track(client, config).await.expect("Can't get current track").clone();
+async fn get_scrobble(client: Client) -> tokio::io::Result<Option<Presence>> {
+    let current_track = CurrentTrack::new(client)
+        .await
+        .expect("Can't get current track")
+        .clone();
     match current_track.recenttracks.track[0].attr {
         Some(_) => {
             info!("Track is now playing");
@@ -158,8 +157,6 @@ async fn get_scrobble(
                 Ok(Some(presence))
             }
         }
-        None => {
-            Ok(None)
-        }
+        None => Ok(None),
     }
 }

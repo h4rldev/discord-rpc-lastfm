@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
+use tracing::info;
 
 use crate::config::Config;
 
@@ -76,13 +77,20 @@ pub struct TrackAttr {
     pub nowplaying: String,
 }
 
-pub async fn get_track(client: Client, config: Config) -> Result<CurrentTrack, Box<dyn std::error::Error>> {
-    let url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={}&api_key={}&format=json", config.username, config.api_key);
-    Ok(
-        client
-        .get(url)
-        .timeout(Duration::from_secs(5))
-        .send().await?
-        .json::<CurrentTrack>().await?
-    )
+impl CurrentTrack {
+    pub async fn new(client: Client) -> Result<CurrentTrack, Box<dyn std::error::Error>> {
+        let config = Config::default();
+        info!(
+            "Getting current track from Last.fm for user: {}",
+            config.username
+        );
+        let url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={}&api_key={}&format=json", config.username, config.api_key);
+        Ok(client
+            .get(url)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?
+            .json::<CurrentTrack>()
+            .await?)
+    }
 }
