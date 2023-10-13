@@ -39,11 +39,11 @@ impl Config {
     }
 }
 
-pub async fn read_config() -> Result<Config, Box<dyn std::error::Error>> {
+pub async fn read_config() -> tokio::io::Result<Config> {
     let file_path = format!("{}/config/config.toml", current_dir().unwrap().display());
     if metadata(&file_path).is_ok() {
         let file = std::fs::read_to_string(file_path)?;
-        let config: Config = toml::from_str(&file)?;
+        let config: Config = toml::from_str(&file).expect("Could not parse config file");
         Ok(config)
     } else {
         let (username, api_key) = (var("LASTFM_USERNAME"), var("LASTFM_API_KEY"));

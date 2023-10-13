@@ -1,12 +1,23 @@
 use config::{read_config, Config};
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
+use futures::{stream::FuturesUnordered, StreamExt};
 use reqwest::Client;
 use std::env::current_dir;
-use structs::{CurrentTrack, Presence};
-use tracing::info;
-use url::Url;
+use requests::{get_track, CurrentTrack};
+use tracing::{info, error};
+use url::{Url, ParseError};
+use tokio::spawn;
 mod config;
-mod structs;
+mod requests;
+
+pub struct Presence {
+    pub state: String,
+    pub details: String,
+    pub large_image: String,
+    pub large_text: String,
+    pub small_image: String,
+    pub small_text: String,
+}
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
@@ -19,8 +30,10 @@ async fn main() {
 async fn test_rpc() -> Result<(), Box<dyn std::error::Error>> {
     let mut rpc_client = DiscordIpcClient::new("1161781788306317513")?;
     let request_client = Client::new();
-    let config = read_config().await?;
-    match get_scrobble(request_client, config).await? {
+    let config_task = spawn(read_config());
+    let config = config_task.await?.expect("Could not read config file");
+    let scrobble = spawn(get_scrobble(request_client, config)).await?.expect("Could not get scrobble");
+    match scrobble {
         Some(presence) => {
             let activity = activity::Activity::new()
                 .state(&presence.state)
@@ -65,22 +78,41 @@ async fn write_to_config(username: String, api_key: String) {
     config.write(&file_path).await;
 }
 
+#[allow(dead_code)]
+async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
+    let image = track.recenttracks.track[0].image.clone();
+    let mut is_url: FuturesUnordered<_> = image.into_iter().map(|image| async move {
+        return Url::parse(&image.text);
+    }).collect();
+
+    while let Some(result) = is_url.next().await {
+        match result {
+            Ok(_) => {
+                info!("Image is a valid URL");
+                return Ok(());
+            }
+            Err(_) => {
+                error!("Image is not a valid URL");
+                return Err(ParseError::RelativeUrlWithoutBase);
+            }
+        }
+    }
+    Ok(())
+}
+
+
 async fn get_scrobble(
     client: Client,
     config: Config,
-) -> Result<Option<Presence>, Box<dyn std::error::Error>> {
+) -> tokio::io::Result<Option<Presence>> {
     info!("Getting scrobble for {}", config.username);
-    let url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={}&api_key={}&format=json", config.username, config.api_key);
-    let response = client.get(url).send().await?.json::<CurrentTrack>().await?;
-    let current_track = response.clone();
-
+    let current_track = get_track(client, config).await.expect("Can't get current track").clone();
     match current_track.recenttracks.track[0].attr {
         Some(_) => {
             info!("Track is now playing");
             let track = current_track.recenttracks.track[0].clone();
             let image = track.image.last().unwrap().clone();
-            if Url::parse(&image.text).is_ok() {
-                info!("Image is a valid URL");
+            if verify_urls(current_track).await.is_ok() {
                 let presence = Presence {
                     state: track.artist.text,
                     details: format!("{} img size: {}", track.name, image.size),
@@ -102,7 +134,6 @@ async fn get_scrobble(
                 );
                 Ok(Some(presence))
             } else {
-                info!("Image is not a valid URL");
                 let presence = Presence {
                     state: track.artist.text,
                     details: format!("{} img size: {}", track.name, image.size),
@@ -128,7 +159,6 @@ async fn get_scrobble(
             }
         }
         None => {
-            info!("No track playing");
             Ok(None)
         }
     }
