@@ -10,6 +10,7 @@ use url::{ParseError, Url};
 mod config;
 mod requests;
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Presence {
     pub state: String,
     pub details: String,
@@ -24,50 +25,61 @@ async fn main() {
     tracing_subscriber::fmt::init();
     info!("Trying to write config file");
     info!("Trying to set RPC");
-    test_rpc().await.expect("Couldn't set RPC");
-}
-
-async fn test_rpc() -> Result<(), Box<dyn std::error::Error>> {
-    let mut rpc_client = DiscordIpcClient::new("1161781788306317513")?;
+    let mut rpc_client = DiscordIpcClient::new("1161781788306317513").expect("Could not set RPC");
     let request_client = Client::new();
-    let scrobble = spawn(get_scrobble(request_client))
-        .await?
-        .expect("Could not get scrobble");
-    match scrobble {
-        Some(presence) => {
-            let activity = activity::Activity::new()
-                .state(&presence.state)
-                .details(&presence.details)
-                .assets(
-                    activity::Assets::new()
-                        .large_image(&presence.large_image)
-                        .large_text(&presence.large_text)
-                        .small_image(&presence.small_image)
-                        .small_text(&presence.small_text),
-                );
+    info!("Connecting to IPC");
+    loop {
+        if rpc_client.connect().is_ok() {
+            info!("Connected to IPC");
+            break;
+        }
+    }
+    let mut last_scrobble: Option<Option<Presence>> = None;
+    loop {
+        let scrobble = spawn(get_scrobble(request_client.clone()))
+            .await
+            .expect("Could not spawn get_scrobble")
+            .expect("Could not get scrobble");
 
-            info!("Connecting to IPC");
-            loop {
-                if rpc_client.connect().is_ok() {
-                    info!("Connected to IPC");
-                    break;
+        if Some(scrobble.clone()) != last_scrobble {
+            info!("Track has changed");
+            last_scrobble = Some(scrobble.clone());
+            match scrobble {
+                Some(presence) => {
+                    let activity = activity::Activity::new()
+                        .state(&presence.state)
+                        .details(&presence.details)
+                        .assets(
+                            activity::Assets::new()
+                                .large_image(&presence.large_image)
+                                .large_text(&presence.large_text)
+                                .small_image(&presence.small_image)
+                                .small_text(&presence.small_text),
+                        );
+
+                    info!("Track is now playing");
+                    loop {
+                        if rpc_client.set_activity(activity.clone()).is_ok() {
+                            info!("Setting activity");
+                            info!(
+                                "Activity status: {}\n{}\n{}\n{}\n{}\n{}",
+                                presence.state,
+                                presence.details,
+                                presence.large_image,
+                                presence.large_text,
+                                presence.small_image,
+                                presence.small_text
+                            );
+                            break;
+                        }
+                    }
+                }
+                None => {
+                    info!("No track playing");
                 }
             }
-
-            loop {
-                if rpc_client.set_activity(activity.clone()).is_ok() {
-                    info!("Set activity");
-                    break;
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_secs(60));
-
-            Ok(())
         }
-        None => {
-            info!("No track playing");
-            Ok(())
-        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
@@ -75,7 +87,7 @@ async fn test_rpc() -> Result<(), Box<dyn std::error::Error>> {
 async fn write_to_config(username: String, api_key: String) {
     let file_path = format!("{}/config/config.toml", current_dir().unwrap().display());
     let config = Config { username, api_key };
-    config.write(&file_path).await;
+    config.write(&file_path);
 }
 
 #[allow(dead_code)]
@@ -108,13 +120,12 @@ async fn get_scrobble(client: Client) -> tokio::io::Result<Option<Presence>> {
         .clone();
     match current_track.recenttracks.track[0].attr {
         Some(_) => {
-            info!("Track is now playing");
             let track = current_track.recenttracks.track[0].clone();
             let image = track.image.last().unwrap().clone();
             if verify_urls(current_track).await.is_ok() {
                 let presence = Presence {
                     state: track.artist.text,
-                    details: format!("{} img size: {}", track.name, image.size),
+                    details: track.name,
                     large_image: image.text,
                     large_text: track.album.text,
                     small_image:
@@ -122,20 +133,11 @@ async fn get_scrobble(client: Client) -> tokio::io::Result<Option<Presence>> {
                             .to_string(),
                     small_text: "last.fm".to_string(),
                 };
-                info!(
-                    "{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
-                    presence.state,
-                    presence.details,
-                    presence.large_image,
-                    presence.large_text,
-                    presence.small_image,
-                    presence.small_text
-                );
                 Ok(Some(presence))
             } else {
                 let presence = Presence {
                     state: track.artist.text,
-                    details: format!("{} img size: {}", track.name, image.size),
+                    details: track.name,
                     large_image:
                         "https://media.discordapp.net/attachments/913382777993433149/1162078177636667496/questionmark.png"
                             .to_string(),
@@ -145,15 +147,6 @@ async fn get_scrobble(client: Client) -> tokio::io::Result<Option<Presence>> {
                             .to_string(),
                     small_text: "last.fm".to_string(),
                 };
-                info!(
-                    "{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
-                    presence.state,
-                    presence.details,
-                    presence.large_image,
-                    presence.large_text,
-                    presence.small_image,
-                    presence.small_text
-                );
                 Ok(Some(presence))
             }
         }

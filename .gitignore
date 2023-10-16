@@ -1,4 +1,6 @@
 /target
 /config
+/debug
+/build
 sample.json
 .env
