@@ -5,7 +5,7 @@ use requests::CurrentTrack;
 use reqwest::Client;
 use std::env::current_dir;
 use tokio::spawn;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use url::{ParseError, Url};
 mod config;
 mod requests;
@@ -23,7 +23,6 @@ pub struct Presence {
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     tracing_subscriber::fmt::init();
-    info!("Trying to write config file");
     info!("Trying to set RPC");
     let mut rpc_client = DiscordIpcClient::new("1161781788306317513").expect("Could not set RPC");
     let request_client = Client::new();
@@ -32,6 +31,8 @@ async fn main() {
         if rpc_client.connect().is_ok() {
             info!("Connected to IPC");
             break;
+        } else {
+            error!("Could not connect to IPC, retrying");
         }
     }
     let mut last_scrobble: Option<Option<Presence>> = None;
@@ -40,9 +41,9 @@ async fn main() {
             .await
             .expect("Could not spawn get_scrobble")
             .expect("Could not get scrobble");
+        tokio::time::sleep(std::time::Duration::from_secs_f32(0.5)).await;
 
         if Some(scrobble.clone()) != last_scrobble {
-            info!("Track has changed");
             last_scrobble = Some(scrobble.clone());
             match scrobble {
                 Some(presence) => {
@@ -61,25 +62,41 @@ async fn main() {
                     loop {
                         if rpc_client.set_activity(activity.clone()).is_ok() {
                             info!("Setting activity");
-                            info!(
-                                "Activity status: {}\n{}\n{}\n{}\n{}\n{}",
-                                presence.state,
-                                presence.details,
-                                presence.large_image,
-                                presence.large_text,
-                                presence.small_image,
-                                presence.small_text
-                            );
+                            info!("Activity status:");
+                            info!("State: {}", presence.state);
+                            info!("Details: {}", presence.details);
+                            info!("Large Image URL: {}", presence.large_image);
+                            info!("Large Image Text: {}", presence.large_text);
+                            info!("Small Image URL: {}", presence.small_image);
+                            info!("Small Image Text: {}", presence.small_text);
+                            break;
+                        }
+                    }
+                    loop {
+                        if rpc_client.set_activity(activity.clone()).is_ok() {
                             break;
                         }
                     }
                 }
                 None => {
-                    info!("No track playing");
+                    warn!("No track playing");
+                    loop {
+                        if rpc_client.clear_activity().is_ok() {
+                            warn!("Clearing activity");
+                            break;
+                        }
+                    }
+                    info!("Checking again in 10 seconds.");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
                 }
             }
+        } else if scrobble.is_none() {
+            warn!("No track playing");
+            info!("Checking again in 10 seconds.");
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        } else {
+            info!("Track has not changed");
         }
-        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
@@ -101,12 +118,11 @@ async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
     if let Some(result) = is_url.next().await {
         match result {
             Ok(_) => {
-                info!("Image is a valid URL");
                 return Ok(());
             }
-            Err(_) => {
+            Err(error) => {
                 error!("Image is not a valid URL");
-                return Err(ParseError::RelativeUrlWithoutBase);
+                return Err(error);
             }
         }
     }

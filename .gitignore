@@ -4,3 +4,4 @@
 /build
 sample.json
 .env
+*.exe
