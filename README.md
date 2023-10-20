@@ -28,9 +28,9 @@ or
 
 ## Todo
 
-[] - Log to file instead of in console
-[] - Toggle console
-[] - Run in console
+- [ ] Log to file instead of in console
+- [ ] Toggle console
+- [ ] Run in console
 
 ## Dependencies
 
