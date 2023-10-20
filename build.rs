@@ -4,7 +4,11 @@ fn build() {
         .set("InternalName", "Last.fm Discord RPC")
         .set("OriginalFilename", "discord_rpc_lastfm.exe")
         .set("ProductName", "Last.fm Discord RPC")
-        .set("Description", "Discord Rich Presence for Last.fm scrobbles")
+        .set(
+            "FileDescription",
+            "Discord Rich Presence for Last.fm scrobbles",
+        )
+        .set("LegalCopyright", "H4rl, 2023")
         /*.set_manifest(manifest)*/
         .compile()
         .expect("Failed to compile resource file");

@@ -3,7 +3,6 @@ use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use futures::{stream::FuturesUnordered, StreamExt};
 use requests::CurrentTrack;
 use reqwest::Client;
-use std::env::current_dir;
 use tokio::spawn;
 use tracing::{error, info, warn};
 use url::{ParseError, Url};
@@ -20,11 +19,34 @@ pub struct Presence {
     pub small_text: String,
 }
 
+impl Presence {
+    fn convert_to_activity(&self) -> activity::Activity {
+        activity::Activity::new()
+            .state(&self.state)
+            .details(&self.details)
+            .assets(
+                activity::Assets::new()
+                    .large_image(&self.large_image)
+                    .large_text(&self.large_text)
+                    .small_image(&self.small_image)
+                    .small_text(&self.small_text),
+            )
+    }
+}
+
+pub const DEFAULT_CLIENT_ID: &str = "1161781788306317513";
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     tracing_subscriber::fmt::init();
     info!("Trying to set RPC");
-    let mut rpc_client = DiscordIpcClient::new("1161781788306317513").expect("Could not set RPC");
+    let config = Config::default();
+    let client_id = if config.client_id.as_str().is_empty() {
+        DEFAULT_CLIENT_ID
+    } else {
+        config.client_id.as_str()
+    };
+    let mut rpc_client = DiscordIpcClient::new(client_id).expect("Could not set RPC");
     let request_client = Client::new();
     info!("Connecting to IPC");
     loop {
@@ -36,6 +58,7 @@ async fn main() {
         }
     }
     let mut last_scrobble: Option<Option<Presence>> = None;
+    let mut is_track_still_playing: Option<String> = None;
     loop {
         let scrobble = spawn(get_scrobble(request_client.clone()))
             .await
@@ -44,23 +67,16 @@ async fn main() {
         tokio::time::sleep(std::time::Duration::from_secs_f32(0.5)).await;
 
         if Some(scrobble.clone()) != last_scrobble {
+            is_track_still_playing = None;
             last_scrobble = Some(scrobble.clone());
             match scrobble {
                 Some(presence) => {
-                    let activity = activity::Activity::new()
-                        .state(&presence.state)
-                        .details(&presence.details)
-                        .assets(
-                            activity::Assets::new()
-                                .large_image(&presence.large_image)
-                                .large_text(&presence.large_text)
-                                .small_image(&presence.small_image)
-                                .small_text(&presence.small_text),
-                        );
-
                     info!("Track is now playing");
                     loop {
-                        if rpc_client.set_activity(activity.clone()).is_ok() {
+                        if rpc_client
+                            .set_activity(presence.convert_to_activity())
+                            .is_ok()
+                        {
                             info!("Setting activity");
                             info!("Activity status:");
                             info!("State: {}", presence.state);
@@ -69,11 +85,6 @@ async fn main() {
                             info!("Large Image Text: {}", presence.large_text);
                             info!("Small Image URL: {}", presence.small_image);
                             info!("Small Image Text: {}", presence.small_text);
-                            break;
-                        }
-                    }
-                    loop {
-                        if rpc_client.set_activity(activity.clone()).is_ok() {
                             break;
                         }
                     }
@@ -95,19 +106,15 @@ async fn main() {
             info!("Checking again in 10 seconds.");
             tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
         } else {
-            info!("Track has not changed");
+            let info = "Track is still playing".to_string();
+            if Some(info.clone()) != is_track_still_playing {
+                is_track_still_playing = Some(info.clone());
+                info!("{}", info);
+            }
         }
     }
 }
 
-#[allow(dead_code)]
-async fn write_to_config(username: String, api_key: String) {
-    let file_path = format!("{}/config/config.toml", current_dir().unwrap().display());
-    let config = Config { username, api_key };
-    config.write(&file_path);
-}
-
-#[allow(dead_code)]
 async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
     let image = track.recenttracks.track[0].image.clone();
     let mut is_url: FuturesUnordered<_> = image
@@ -130,10 +137,16 @@ async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
 }
 
 async fn get_scrobble(client: Client) -> tokio::io::Result<Option<Presence>> {
-    let current_track = CurrentTrack::new(client)
-        .await
-        .expect("Can't get current track")
-        .clone();
+    let current_track = loop {
+        match CurrentTrack::new(client.clone()).await {
+            Ok(current_track) => {
+                break current_track;
+            }
+            Err(error) => {
+                error!("Could not get current track: {}", error);
+            }
+        }
+    };
     match current_track.recenttracks.track[0].attr {
         Some(_) => {
             let track = current_track.recenttracks.track[0].clone();

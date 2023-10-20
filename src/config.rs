@@ -1,3 +1,4 @@
+use crate::DEFAULT_CLIENT_ID;
 use dotenv::dotenv;
 use inquire::Text;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,7 @@ use tracing::info;
 pub struct Config {
     pub username: String,
     pub api_key: String,
+    pub client_id: String,
 }
 
 impl Config {
@@ -49,37 +51,78 @@ impl Default for Config {
             let config: Config = toml::from_str(&file).expect("Could not parse config file");
             config
         } else {
-            let (username, api_key) = (var("LASTFM_USERNAME"), var("LASTFM_API_KEY"));
+            let (username, api_key, client_id) = (
+                var("LASTFM_USERNAME"),
+                var("LASTFM_API_KEY"),
+                var("CLIENT_ID"),
+            );
 
-            if var("LASTFM_USERNAME").is_err() || var("LASTFM_API_KEY").is_err() {
+            if var("LASTFM_USERNAME").is_err()
+                || var("LASTFM_API_KEY").is_err()
+                || var("CLIENT_ID").is_err()
+            {
                 dotenv().ok();
-                let (username, api_key) = (var("LASTFM_USERNAME"), var("LASTFM_API_KEY"));
+                let (username, api_key, client_id) = (
+                    var("LASTFM_USERNAME"),
+                    var("LASTFM_API_KEY"),
+                    var("CLIENT_ID"),
+                );
 
-                if var("LASTFM_USERNAME").is_err() || var("LASTFM_API_KEY").is_err() {
-                    let (username, api_key) = (
+                if var("LASTFM_USERNAME").is_err()
+                    || var("LASTFM_API_KEY").is_err()
+                    || var("CLIENT_ID").is_err()
+                {
+                    let (username, api_key, client_id) = (
                         Text::new("What's your Last.fm username?")
                             .prompt()
                             .expect("Could not get username from prompt"),
                         Text::new("What's your Last.fm API key?")
                             .prompt()
                             .expect("Could not get API key from prompt"),
+                        Text::new("Enter a discord developer client id, keep empty for default")
+                            .prompt()
+                            .expect("Could not get client id from prompt"),
                     );
-                    let config = Config { username, api_key };
-                    config.write(&file_path);
-                    config
+                    if client_id.is_empty() {
+                        let config = Config {
+                            username,
+                            api_key,
+                            client_id: DEFAULT_CLIENT_ID.to_string(),
+                        };
+                        config.write(&file_path);
+                        config
+                    } else {
+                        let config = Config {
+                            username,
+                            api_key,
+                            client_id,
+                        };
+                        config.write(&file_path);
+                        config
+                    }
                 } else {
-                    let (username, api_key) = (
+                    let (username, api_key, client_id) = (
                         username.expect("Couldn't get username"),
                         api_key.expect("Couldn't get api_key"),
+                        client_id.expect("Couldn't get client_id"),
                     );
-                    Config { username, api_key }
+                    Config {
+                        username,
+                        api_key,
+                        client_id,
+                    }
                 }
             } else {
-                let (username, api_key) = (
+                let (username, api_key, client_id) = (
                     username.expect("Couldn't get username"),
                     api_key.expect("Couldn't get api_key"),
+                    client_id.expect("Couldn't get client_id"),
                 );
-                Config { username, api_key }
+                Config {
+                    username,
+                    api_key,
+                    client_id,
+                }
             }
         }
     }
