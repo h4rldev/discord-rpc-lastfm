@@ -30,7 +30,7 @@ or
 
 - [ ] Log to file instead of in console
 - [ ] Toggle console
-- [ ] Run in console
+- [ ] Run in background
 
 ## Dependencies
 
