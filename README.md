@@ -26,6 +26,12 @@ or
 1. Run the executable
 2. Follow the prompts to enter your Last.fm username and API key, and possibly client_id (if you want a different title).
 
+## Todo
+
+[] - Log to file instead of in console
+[] - Toggle console
+[] - Run in console
+
 ## Dependencies
 
 - `discord-rich-presence`
