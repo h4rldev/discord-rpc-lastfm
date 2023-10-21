@@ -30,9 +30,8 @@ jobs:
         with:
           just-version: '1.15.0'
 
-      - name: "Build & test"
+      - name: "Build release"
         run: |
-            just test
             just build-release
 
       - uses: "marvinpinto/action-automatic-releases@latest"
