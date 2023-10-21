@@ -1,5 +1,11 @@
 name: "Release a new version"
 
+permissions:
+    id-token: "write"
+    contents: "write"
+    packages: "write"
+    pull-requests: "read"
+
 on:
   push:
     tags:
@@ -10,25 +16,36 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  tagged-release:
-    name: "Tagged Release"
+  build_and_release:
     runs-on: "ubuntu-latest"
 
     steps:
-      - uses: extractions/setup-just@v1
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+
+      - name: "Install Rust"
+        run: rustup update stable
+
+      - name: "Install cross-compilation tools"
+        uses: "taiki-e/setup-cross-toolchain-action@v1"
         with:
-          just-version: '1.15.0'
+          target: "x86_64-pc-windows-gnu"
 
-      - name: "Build & test"
-        run: |
-            ls
-            just test
-            just build-release
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: build
+          target: x86_64-pc-windows-gnu
+          args: "--release"
 
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      - name: Move binary
+        run: mv target/x86_64-pc-windows-gnu/release/*.exe .
+
+      - name: "Create release"
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+          title: "Release ${{ github.ref_name }}"
           files: |
-            LICENSE.txt
             *.exe
