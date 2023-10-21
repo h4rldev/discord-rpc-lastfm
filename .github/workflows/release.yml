@@ -32,10 +32,13 @@ jobs:
           target: x86_64-pc-windows-gnu
           args: "--release"
 
+      - name: Move binary
+        run: mv target/x86_64-pc-windows-gnu/release/*.exe .
+
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+          title: "Release ${{ github.ref }}"
           files: |
-            LICENSE.txt
             *.exe
