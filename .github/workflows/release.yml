@@ -25,14 +25,12 @@ jobs:
         with:
           target: "x86_64-pc-windows-gnu"
 
-      - name: "Install just"
-        uses: extractions/setup-just@v1
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v0
         with:
-          just-version: '1.15.0'
-
-      - name: "Build release"
-        run: |
-            just build-release
+          command: both
+          target: x86_64-pc-windows-gnu
+          args: "--release"
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
