@@ -12,7 +12,7 @@ env:
 jobs:
   tagged-release:
     name: "Tagged Release"
-    runs-on: "ubuntu-latest"
+    runs-on: "windows-latest"
 
     steps:
       - uses: "actions/checkout@v3"
