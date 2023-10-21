@@ -36,7 +36,11 @@ set positional-arguments
 @run-windows args="":
     cargo run --target x86_64-pc-windows-gnu -- $1
 
-@fix-tags args="v0.1.1":
+@create-tag args="v0.1.2":
+    git tag $1
+    git push origin $1
+
+@fix-tag args="v0.1.2":
     git tag -d $1
     git tag $1
     git push origin :$1
