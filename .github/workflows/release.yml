@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +21,7 @@ jobs:
 
       - name: "Build & test"
         run: |
+            ls
             just test
             just build-release
 
