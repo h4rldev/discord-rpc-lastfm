@@ -22,9 +22,8 @@ jobs:
 
       - name: "Build & test"
         run: |
-            ls
             just test
-            just build-release
+            just build-windows-release
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
