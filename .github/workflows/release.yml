@@ -1,0 +1,32 @@
+name: "Release a new version"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tagged-release:
+    name: "Tagged Release"
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - uses: extractions/setup-just@v1
+        with:
+          just-version: '1.15.0'
+
+      - name: "Build & test"
+        run: |
+            just test
+            just build-release
+
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            LICENSE.txt
+            *.exe

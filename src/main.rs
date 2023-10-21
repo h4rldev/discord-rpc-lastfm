@@ -58,7 +58,7 @@ async fn main() {
         }
     }
     let mut last_scrobble: Option<Option<Presence>> = None;
-    let mut is_track_still_playing: Option<String> = None;
+    let mut track_status: Option<String> = None;
     loop {
         let scrobble = spawn(get_scrobble(request_client.clone()))
             .await
@@ -67,7 +67,7 @@ async fn main() {
         tokio::time::sleep(std::time::Duration::from_secs_f32(0.5)).await;
 
         if Some(scrobble.clone()) != last_scrobble {
-            is_track_still_playing = None;
+            track_status = None;
             last_scrobble = Some(scrobble.clone());
             match scrobble {
                 Some(presence) => {
@@ -102,13 +102,15 @@ async fn main() {
                 }
             }
         } else if scrobble.is_none() {
-            warn!("No track playing");
-            info!("Checking again in 10 seconds.");
-            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            let info = "No track playing".to_string();
+            if Some(info.clone()) != track_status {
+                track_status = Some(info.clone());
+                info!("{}", info);
+            }
         } else {
             let info = "Track is still playing".to_string();
-            if Some(info.clone()) != is_track_still_playing {
-                is_track_still_playing = Some(info.clone());
+            if Some(info.clone()) != track_status {
+                track_status = Some(info.clone());
                 info!("{}", info);
             }
         }
