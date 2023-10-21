@@ -37,7 +37,6 @@ set positional-arguments
     cargo run --target x86_64-pc-windows-gnu -- $1
 
 @fix-tags args="v0.1.1":
-    git checkout $1-branch
     git tag -d $1
     git tag $1
     git push origin :$1

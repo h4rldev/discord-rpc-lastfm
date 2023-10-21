@@ -90,15 +90,17 @@ async fn main() {
                     }
                 }
                 None => {
-                    warn!("No track playing");
-                    loop {
-                        if rpc_client.clear_activity().is_ok() {
-                            warn!("Clearing activity");
-                            break;
+                    let info = "No track playing".to_string();
+                    if Some(info.clone()) != track_status {
+                        track_status = Some(info.clone());
+                        info!("{}", info);
+                        loop {
+                            if rpc_client.clear_activity().is_ok() {
+                                warn!("Clearing activity");
+                                break;
+                            }
                         }
                     }
-                    info!("Checking again in 10 seconds.");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
                 }
             }
         } else if scrobble.is_none() {
