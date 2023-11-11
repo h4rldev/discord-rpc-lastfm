@@ -12,11 +12,12 @@ Discord Rich Presence client for Last.fm, made in Rust.
 
 ## Installation
 
-> Get it from [releases](https://github.com/h4rldev/discord-rpc-lastfm/releases)
+> Get it from [releases](https://github.com/h4rldev/discord-rpc-lastfm/releases) (Windows binaries only)
 
 or
 
 > Build it yourself!
+
 1. Clone the repository: `git clone https://github.com/h4rldev/discord-rpc-lastfm`
 2. Navigate to the project directory: `cd discord-rpc-lastfm`
 3. Build the project: `cargo build --release`
@@ -28,7 +29,7 @@ or
 
 ## Todo
 
-- [ ] Log to file instead of in console
+- [x] Log to file instead of in console
 - [ ] Toggle console
 - [ ] Run in background
 
@@ -40,11 +41,16 @@ or
 - `toml`
 - `serde`
 - `tracing`
-- `dotenv`
-- `url`
 - `tracing-subscriber`
+- `tracing-appender`
+- `dotenvy`
+- `url`
 - `futures`
 - `inquire`
+- `crossterm`
+- `colored`
+- `home`
+- `terminal_size`
 
 ## Contributing
 
