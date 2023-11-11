@@ -1,6 +1,10 @@
 use colored::Colorize;
 use config::Config;
-use crossterm::{cursor::MoveTo, terminal::Clear, terminal::ClearType, ExecutableCommand};
+use crossterm::{
+    cursor::MoveTo,
+    terminal::{Clear, ClearType, SetTitle},
+    ExecutableCommand,
+};
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use futures::{stream::FuturesUnordered, StreamExt};
 use home::home_dir;
@@ -143,6 +147,9 @@ async fn main() {
 }
 
 async fn status_screen(presence: Presence) {
+    stdout()
+        .execute(SetTitle("discord-rpc-lastfm"))
+        .expect("Could not set terminal title");
     stdout()
         .execute(MoveTo(0, 0))
         .expect("Could not move cursor to start of terminal");
