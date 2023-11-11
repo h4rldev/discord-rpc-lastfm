@@ -1,10 +1,20 @@
+use colored::Colorize;
 use config::Config;
+use crossterm::{cursor::MoveTo, terminal::Clear, terminal::ClearType, ExecutableCommand};
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use futures::{stream::FuturesUnordered, StreamExt};
+use home::home_dir;
 use requests::CurrentTrack;
 use reqwest::Client;
-use tokio::spawn;
+use std::io::stdout;
+use terminal_size::{terminal_size, Height, Width};
+use tokio::{
+    spawn,
+    time::{sleep, Duration},
+};
 use tracing::{error, info, warn};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::fmt::{format::FmtSpan, Subscriber};
 use url::{ParseError, Url};
 mod config;
 mod requests;
@@ -17,6 +27,7 @@ pub struct Presence {
     pub large_text: String,
     pub small_image: String,
     pub small_text: String,
+    pub buttons: Vec<(String, String)>,
 }
 
 impl Presence {
@@ -31,6 +42,10 @@ impl Presence {
                     .small_image(&self.small_image)
                     .small_text(&self.small_text),
             )
+            .buttons(vec![
+                activity::Button::new(&self.buttons[0].0, &self.buttons[0].1),
+                activity::Button::new(&self.buttons[1].0, &self.buttons[1].1),
+            ])
     }
 }
 
@@ -38,16 +53,31 @@ pub const DEFAULT_CLIENT_ID: &str = "1161781788306317513";
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let log_dir = if cfg!(windows) {
+        home_dir()
+            .expect("Could not get home directory")
+            .join(".logs\\discord-rpc-lastfm")
+            .display()
+            .to_string()
+    } else {
+        "/var/log/".to_string()
+    };
+    let file_appender =
+        RollingFileAppender::new(Rotation::DAILY, log_dir, "discord-rpc-lastfm.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    let subscriber = Subscriber::builder()
+        .with_writer(non_blocking)
+        .with_span_events(FmtSpan::CLOSE)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("Could not set global default");
     info!("Trying to set RPC");
     let config = Config::default();
-    let client_id = if config.client_id.as_str().is_empty() {
+    let client_id = if config.client_id.is_empty() {
         DEFAULT_CLIENT_ID
     } else {
-        config.client_id.as_str()
+        &config.client_id
     };
     let mut rpc_client = DiscordIpcClient::new(client_id).expect("Could not set RPC");
-    let request_client = Client::new();
     info!("Connecting to IPC");
     loop {
         if rpc_client.connect().is_ok() {
@@ -60,11 +90,10 @@ async fn main() {
     let mut last_scrobble: Option<Option<Presence>> = None;
     let mut track_status: Option<String> = None;
     loop {
-        let scrobble = spawn(get_scrobble(request_client.clone()))
+        let scrobble = spawn(get_scrobble(Client::new(), Config::default()))
             .await
             .expect("Could not spawn get_scrobble")
             .expect("Could not get scrobble");
-        tokio::time::sleep(std::time::Duration::from_secs_f32(0.5)).await;
 
         if Some(scrobble.clone()) != last_scrobble {
             track_status = None;
@@ -78,13 +107,7 @@ async fn main() {
                             .is_ok()
                         {
                             info!("Setting activity");
-                            info!("Activity status:");
-                            info!("State: {}", presence.state);
-                            info!("Details: {}", presence.details);
-                            info!("Large Image URL: {}", presence.large_image);
-                            info!("Large Image Text: {}", presence.large_text);
-                            info!("Small Image URL: {}", presence.small_image);
-                            info!("Small Image Text: {}", presence.small_text);
+                            spawn(status_screen(presence.clone()));
                             break;
                         }
                     }
@@ -119,6 +142,61 @@ async fn main() {
     }
 }
 
+async fn status_screen(presence: Presence) {
+    stdout()
+        .execute(MoveTo(0, 0))
+        .expect("Could not move cursor to start of terminal");
+    stdout()
+        .execute(Clear(ClearType::FromCursorDown))
+        .expect("Could not clear terminal from cursor down");
+    if let Some((Width(width), Height(height))) = terminal_size() {
+        let output = format!(
+            "{}\n{}\n{}",
+            presence.details.green(),
+            presence.state.red(),
+            presence.large_text.yellow(),
+        );
+        let lines = output.matches('\n').count() + 1;
+        let lines = lines as u16;
+        let vertical_padding = if height > lines {
+            (height - lines) / 2
+        } else {
+            0
+        };
+        stdout()
+            .execute(MoveTo(0, 0))
+            .expect("Could not move cursor to start of terminal");
+        for _ in 0..vertical_padding {
+            println!();
+        }
+        let output_lines: Vec<&str> = output.split('\n').collect();
+        for line in output_lines {
+            println!("{:^width$}", line, width = width as usize);
+        }
+        for _ in 0..vertical_padding {
+            println!();
+        }
+        stdout()
+            .execute(MoveTo(0, 0))
+            .expect("Could not move cursor to start of terminal");
+    } else {
+        stdout()
+            .execute(MoveTo(0, 0))
+            .expect("Could not move cursor to start of terminal");
+        let output = format!(
+            "{}\n{}\n{}",
+            presence.details.green(),
+            presence.state.red(),
+            presence.large_text.yellow(),
+        );
+        println!("{}", output);
+        stdout()
+            .execute(MoveTo(0, 0))
+            .expect("Could not move cursor to start of terminal");
+    }
+    sleep(Duration::from_secs_f32(0.5)).await;
+}
+
 async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
     let image = track.recenttracks.track[0].image.clone();
     let mut is_url: FuturesUnordered<_> = image
@@ -132,7 +210,6 @@ async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
                 return Ok(());
             }
             Err(error) => {
-                error!("Image is not a valid URL");
                 return Err(error);
             }
         }
@@ -140,7 +217,7 @@ async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
     Ok(())
 }
 
-async fn get_scrobble(client: Client) -> tokio::io::Result<Option<Presence>> {
+async fn get_scrobble(client: Client, config: Config) -> tokio::io::Result<Option<Presence>> {
     let current_track = loop {
         match CurrentTrack::new(client.clone()).await {
             Ok(current_track) => {
@@ -151,34 +228,68 @@ async fn get_scrobble(client: Client) -> tokio::io::Result<Option<Presence>> {
             }
         }
     };
+    sleep(Duration::from_secs_f32(0.5)).await;
     match current_track.recenttracks.track[0].attr {
         Some(_) => {
             let track = current_track.recenttracks.track[0].clone();
             let image = track.image.last().unwrap().clone();
             if verify_urls(current_track).await.is_ok() {
-                let presence = Presence {
-                    state: track.artist.text,
-                    details: track.name,
-                    large_image: image.text,
-                    large_text: track.album.text,
-                    small_image:
-                        "https://www.last.fm/static/images/lastfm_avatar_twitter.52a5d69a85ac.png"
-                            .to_string(),
-                    small_text: "last.fm".to_string(),
-                };
-                Ok(Some(presence))
+                /* trunk-ignore(trufflehog/FastlyPersonalToken) */
+                /* trunk-ignore(trufflehog/Lastfm) */
+                if image.text == "https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png" {
+                    let presence = Presence {
+                        state: track.artist.text,
+                        details: track.name,
+                        large_image:
+                            "https://cdn.signed.host/643beee7355f27cfb8628f80/1XP4viYdypmFHAUDNb.png"
+                                .to_string(),
+                        large_text: track.album.text,
+                        small_image:
+                            "https://www.last.fm/static/images/lastfm_avatar_twitter.52a5d69a85ac.png"
+                                .to_string(),
+                        small_text: "last.fm".to_string(),
+                        buttons: vec![("View on last.fm".to_string(), track.url.clone()), (format!("{} on last.fm", config.username), format!("https://last.fm/user/{}", config.username))],
+                    };
+                    Ok(Some(presence))
+                } else {
+                    let presence = Presence {
+                        state: track.artist.text,
+                        details: track.name,
+                        large_image: image.text,
+                        large_text: track.album.text,
+                        small_image:
+                            "https://www.last.fm/static/images/lastfm_avatar_twitter.52a5d69a85ac.png"
+                                .to_string(),
+                        small_text: "last.fm".to_string(),
+                        buttons: vec![
+                            ("View on last.fm".to_string(), track.url.clone()),
+                            (
+                                format!("{} on last.fm", config.username),
+                                format!("https://last.fm/user/{}", config.username),
+                            ),
+                        ],
+                    };
+                    Ok(Some(presence))
+                }
             } else {
                 let presence = Presence {
                     state: track.artist.text,
                     details: track.name,
                     large_image:
-                        "https://media.discordapp.net/attachments/913382777993433149/1162078177636667496/questionmark.png"
+                        "https://cdn.signed.host/643beee7355f27cfb8628f80/1XP4viYdypmFHAUDNb.png"
                             .to_string(),
                     large_text: track.album.text,
                     small_image:
                         "https://www.last.fm/static/images/lastfm_avatar_twitter.52a5d69a85ac.png"
                             .to_string(),
                     small_text: "last.fm".to_string(),
+                    buttons: vec![
+                        ("View on last.fm".to_string(), track.url.clone()),
+                        (
+                            format!("{} on last.fm", config.username),
+                            format!("https://last.fm/user/{}", config.username),
+                        ),
+                    ],
                 };
                 Ok(Some(presence))
             }

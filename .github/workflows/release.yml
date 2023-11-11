@@ -1,15 +1,16 @@
-name: "Release a new version"
+name: Release a new version
 
 permissions:
-    id-token: "write"
-    contents: "write"
-    packages: "write"
-    pull-requests: "read"
+  id-token: write
+  contents: write
+  packages: write
+  pull-requests: read
 
 on:
   push:
     tags:
-      - "v*"
+      - v*
+  # trunk-ignore(yamllint/empty-values)
   workflow_dispatch:
 
 env:
@@ -17,32 +18,32 @@ env:
 
 jobs:
   build_and_release:
-    runs-on: "ubuntu-latest"
+    runs-on: ubuntu-latest
 
     steps:
-      - name: "Checkout"
-        uses: "actions/checkout@v3"
+      - name: Checkout
+        uses: actions/checkout@v3
 
-      - name: "Install Rust"
+      - name: Install Rust
         run: rustup update stable
 
-      - name: "Install cross-compilation tools"
-        uses: "taiki-e/setup-cross-toolchain-action@v1"
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1
         with:
-          target: "x86_64-pc-windows-gnu"
+          target: x86_64-pc-windows-gnu
 
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v0
         with:
           command: build
           target: x86_64-pc-windows-gnu
-          args: "--release"
+          args: --release
 
       - name: Move binary
         run: mv target/x86_64-pc-windows-gnu/release/*.exe .
 
-      - name: "Create release"
-        uses: "marvinpinto/action-automatic-releases@latest"
+      - name: Create release
+        uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           draft: false
