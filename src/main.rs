@@ -1,7 +1,7 @@
 use colored::Colorize;
 use config::Config;
 use crossterm::{
-    cursor::MoveTo,
+    cursor::{Hide, MoveTo},
     terminal::{Clear, ClearType, SetTitle},
     ExecutableCommand,
 };
@@ -146,6 +146,9 @@ async fn main() {
 }
 
 async fn status_screen(presence: Presence) {
+    stdout()
+        .execute(Hide)
+        .expect("Could not hide cursor in terminal");
     stdout()
         .execute(SetTitle("discord-rpc-lastfm"))
         .expect("Could not set terminal title");
