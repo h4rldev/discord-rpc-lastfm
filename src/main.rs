@@ -2,7 +2,8 @@ use colored::Colorize;
 use config::Config;
 use crossterm::{
     cursor::{Hide, MoveTo},
-    terminal::{Clear, ClearType, SetTitle},
+    style::Print,
+    terminal::{size, Clear, ClearType, SetTitle},
     ExecutableCommand,
 };
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
@@ -10,8 +11,7 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use home::home_dir;
 use requests::CurrentTrack;
 use reqwest::Client;
-use std::io::stdout;
-use terminal_size::{terminal_size, Height, Width};
+use std::io::{stdout, Stdout};
 use tokio::{
     spawn,
     time::{sleep, Duration},
@@ -145,65 +145,51 @@ async fn main() {
     }
 }
 
-async fn status_screen(presence: Presence) {
-    stdout()
-        .execute(Hide)
-        .expect("Could not hide cursor in terminal");
-    stdout()
-        .execute(SetTitle("discord-rpc-lastfm"))
-        .expect("Could not set terminal title");
-    stdout()
-        .execute(MoveTo(0, 0))
-        .expect("Could not move cursor to start of terminal");
-    stdout()
-        .execute(Clear(ClearType::FromCursorDown))
-        .expect("Could not clear terminal from cursor down");
-    if let Some((Width(width), Height(height))) = terminal_size() {
-        let output = format!(
-            "{}\n{}\n{}",
-            presence.details.green(),
-            presence.state.red(),
-            presence.large_text.yellow(),
-        );
-        let lines = output.matches('\n').count() + 1;
-        let lines = lines as u16;
-        let vertical_padding = if height > lines {
-            (height - lines) / 2
-        } else {
-            0
-        };
-        stdout()
-            .execute(MoveTo(0, 0))
-            .expect("Could not move cursor to start of terminal");
-        for _ in 0..vertical_padding {
-            println!();
-        }
-        let output_lines: Vec<&str> = output.split('\n').collect();
-        for line in output_lines {
-            println!("{:^width$}", line, width = width as usize);
-        }
-        for _ in 0..vertical_padding {
-            println!();
-        }
-        stdout()
-            .execute(MoveTo(0, 0))
-            .expect("Could not move cursor to start of terminal");
-    } else {
-        stdout()
-            .execute(MoveTo(0, 0))
-            .expect("Could not move cursor to start of terminal");
-        let output = format!(
-            "{}\n{}\n{}",
-            presence.details.green(),
-            presence.state.red(),
-            presence.large_text.yellow(),
-        );
-        println!("{}", output);
-        stdout()
-            .execute(MoveTo(0, 0))
-            .expect("Could not move cursor to start of terminal");
+fn print_newline(stdout: &mut Stdout, count: u16) -> Result<(), std::io::Error> {
+    for _ in 0..count {
+        stdout.execute(Print("\n"))?;
     }
+    Ok(())
+}
+
+fn clear_screen(stdout: &mut Stdout) -> Result<(), std::io::Error> {
+    stdout
+        .execute(MoveTo(0, 0))?
+        .execute(Clear(ClearType::FromCursorDown))?
+        .execute(MoveTo(0, 0))?;
+    Ok(())
+}
+
+async fn status_screen(presence: Presence) -> tokio::io::Result<()> {
+    let mut stdout = stdout();
+    stdout
+        .execute(Hide)?
+        .execute(SetTitle("discord-rpc-lastfm"))?;
+    clear_screen(&mut stdout)?;
+
+    let output = format!(
+        "{}\n{}\n{}",
+        presence.details.green(),
+        presence.state.red(),
+        presence.large_text.yellow(),
+    );
+    let (width, height) = size()?;
+    let lines = output.matches('\n').count() + 1;
+    let lines = lines as u16;
+    let vertical_padding = if height > lines {
+        (height - lines) / 2
+    } else {
+        0
+    };
+    print_newline(&mut stdout, vertical_padding)?;
+    let output_lines: Vec<&str> = output.lines().collect();
+    for line in output_lines {
+        stdout.execute(Print(format!("{:^width$}\n", line, width = width as usize)))?;
+    }
+    print_newline(&mut stdout, vertical_padding)?;
+    stdout.execute(MoveTo(0, 0))?;
     sleep(Duration::from_secs_f32(0.5)).await;
+    Ok(())
 }
 
 async fn verify_urls(track: CurrentTrack) -> Result<(), ParseError> {
@@ -241,7 +227,7 @@ async fn get_scrobble(client: Client, config: Config) -> tokio::io::Result<Optio
     match current_track.recenttracks.track[0].attr {
         Some(_) => {
             let track = current_track.recenttracks.track[0].clone();
-            let image = track.image.last().unwrap().clone();
+            let image = track.image.last().expect("Couldn't get last image").clone();
             if verify_urls(current_track).await.is_ok() {
                 /* trunk-ignore(trufflehog/FastlyPersonalToken) */
                 /* trunk-ignore(trufflehog/Lastfm) */
@@ -259,7 +245,7 @@ async fn get_scrobble(client: Client, config: Config) -> tokio::io::Result<Optio
                         small_text: "last.fm".to_string(),
                         buttons: vec![("View on last.fm".to_string(), track.url.clone()), (format!("{} on last.fm", config.username), format!("https://last.fm/user/{}", config.username))],
                     };
-                    spawn(status_screen(presence.clone()));
+                    status_screen(presence.clone()).await?;
                     Ok(Some(presence))
                 } else {
                     let presence = Presence {
@@ -279,7 +265,7 @@ async fn get_scrobble(client: Client, config: Config) -> tokio::io::Result<Optio
                             ),
                         ],
                     };
-                    spawn(status_screen(presence.clone()));
+                    status_screen(presence.clone()).await?;
                     Ok(Some(presence))
                 }
             } else {

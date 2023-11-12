@@ -22,7 +22,6 @@ inquire = "0.6.2"
 crossterm = "0.27.0"
 colored = "2.0.4"
 home = "0.5.5"
-terminal_size = "0.3.0"
 
 [build-dependencies]
 winresource = "0.1.17"
