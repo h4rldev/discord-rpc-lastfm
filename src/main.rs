@@ -111,7 +111,6 @@ async fn main() {
                             .is_ok()
                         {
                             info!("Setting activity");
-                            spawn(status_screen(presence.clone()));
                             break;
                         }
                     }
@@ -257,6 +256,7 @@ async fn get_scrobble(client: Client, config: Config) -> tokio::io::Result<Optio
                         small_text: "last.fm".to_string(),
                         buttons: vec![("View on last.fm".to_string(), track.url.clone()), (format!("{} on last.fm", config.username), format!("https://last.fm/user/{}", config.username))],
                     };
+                    spawn(status_screen(presence.clone()));
                     Ok(Some(presence))
                 } else {
                     let presence = Presence {
@@ -276,6 +276,7 @@ async fn get_scrobble(client: Client, config: Config) -> tokio::io::Result<Optio
                             ),
                         ],
                     };
+                    spawn(status_screen(presence.clone()));
                     Ok(Some(presence))
                 }
             } else {
