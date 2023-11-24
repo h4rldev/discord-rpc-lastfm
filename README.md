@@ -50,7 +50,6 @@ or
 - `crossterm`
 - `colored`
 - `home`
-- `terminal_size`
 
 ## Contributing
 
