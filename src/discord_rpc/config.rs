@@ -1,4 +1,4 @@
-use crate::DEFAULT_CLIENT_ID;
+use super::DEFAULT_CLIENT_ID;
 use dotenvy::dotenv;
 use home::home_dir;
 use inquire::Text;
