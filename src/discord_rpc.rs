@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use config::Config;
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use requests::get_scrobble;
@@ -6,6 +8,7 @@ use tokio::spawn;
 use tracing::{error, info, warn};
 
 mod config;
+pub mod gui;
 mod log;
 mod requests;
 mod status_screen;

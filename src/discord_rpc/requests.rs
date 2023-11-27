@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::{status_screen::status_screen, Config, Presence};
 use futures::{stream::FuturesUnordered, StreamExt};
 use reqwest::Client;
