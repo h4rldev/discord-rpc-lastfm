@@ -9,7 +9,12 @@ pub fn setup() {
             .display()
             .to_string()
     } else {
-        "/var/log/".to_string()
+        home_dir()
+            .expect("Could not get home directory")
+            .join(".config")
+            .join("discord-rpc-lastfm")
+            .display()
+            .to_string()
     };
     let file_appender =
         RollingFileAppender::new(Rotation::DAILY, log_dir, "discord-rpc-lastfm.log");
