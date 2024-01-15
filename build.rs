@@ -21,6 +21,6 @@ fn main() {
     {
         build();
     } else {
-        println!("cargo:warning=Not building for Windows, Might not work properly, idk")
+        println!("cargo:warning=Not building for Windows, skipping resource compilation");
     }
 }
