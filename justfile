@@ -38,10 +38,10 @@ set positional-arguments
 
 @create-tag args="v0.2.3":
     git tag $1
-    git push master $1
+    git push origin $1
 
 @fix-tag args="v0.2.3":
     git tag -d $1
     git tag $1
-    git push master :$1
-    git push master $1
+    git push origin :$1
+    git push origin $1

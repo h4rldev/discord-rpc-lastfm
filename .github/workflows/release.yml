@@ -32,15 +32,21 @@ jobs:
         with:
           target: x86_64-pc-windows-gnu
 
-      - name: Build binary
+      - name: Build binary for Windows
         uses: houseabsolute/actions-rust-cross@v0
         with:
           command: build
           target: x86_64-pc-windows-gnu
           args: --release
 
+      - name: Build binary for Linux
+        run: |
+          cargo build --target x86_64-unknown-linux-gnu --release
+
       - name: Move binary
-        run: mv target/x86_64-pc-windows-gnu/release/*.exe .
+        run: |
+          mv target/x86_64-pc-windows-gnu/release/*.exe .
+          mv target/x86_64-unknown-linux-gnu/release/discord-rpc-lastfm .
 
       - name: Create release
         uses: marvinpinto/action-automatic-releases@latest
@@ -50,4 +56,5 @@ jobs:
           prerelease: false
           title: "Release ${{ github.ref_name }}"
           files: |
-            *.exe
+            discord-rpc-lastfm.exe
+            discord-rpc-lastfm
