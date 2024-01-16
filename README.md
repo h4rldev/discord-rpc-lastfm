@@ -12,7 +12,7 @@ Discord Rich Presence client for Last.fm, made in Rust.
 
 ## Installation
 
-> Get it from [releases](https://github.com/h4rldev/discord-rpc-lastfm/releases) (Windows binaries only)
+> Get it from [releases](https://github.com/h4rldev/discord-rpc-lastfm/releases) (Windows & Linux binaries only)
 
 or
 
