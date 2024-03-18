@@ -57,7 +57,7 @@ impl Default for Config {
     fn default() -> Self {
         let file_path = home_dir()
             .expect("Could not get home directory")
-            .join(".config/lastfm-discord-rpc/config.toml");
+            .join(".config").join("discord-rpc-lastfm").join("config.toml");
 
         if Path::exists(&file_path) {
             let file = std::fs::read_to_string(file_path).expect("Could not read config file");
